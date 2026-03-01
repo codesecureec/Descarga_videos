@@ -148,11 +148,6 @@ def download_video(url, download_type, max_height=None):
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }]
-        elif is_ffmpeg_installed():
-            ydl_opts['postprocessors'] = [{
-                'key': 'FFmpegVideoConvertor',
-                'preferredformat': 'mp4',
-            }]
         
         # Primero obtener información del video
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
