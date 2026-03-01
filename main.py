@@ -1,10 +1,18 @@
 import yt_dlp
 import os
 import sys
-from datetime import datetime
 import subprocess
 import platform
 import random
+
+
+VIDEO_QUALITY_PRESETS = {
+    "1": ("Mejor disponible", None),
+    "2": ("2160p (4K)", 2160),
+    "3": ("1440p (2K)", 1440),
+    "4": ("1080p (Full HD)", 1080),
+    "5": ("720p (HD)", 720),
+}
 
 def get_random_user_agent():
     """Retorna un user agent aleatorio de navegador moderno"""
@@ -59,15 +67,37 @@ def download_progress_hook(d):
             sys.stdout.write(f'[{bar}] {percentage:.1f}%')
             sys.stdout.flush()
 
-def get_download_format(download_type):
+def get_download_format(download_type, max_height=None):
     """Obtiene el formato de descarga según el tipo seleccionado"""
     if download_type == "1":  # Video
         if is_ffmpeg_installed():
-            return 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-        return 'best[ext=mp4]/best'
+            if max_height:
+                return (
+                    f'bestvideo[vcodec!=none][height<={max_height}]+'
+                    f'bestaudio[acodec!=none]/best[height<={max_height}]/best'
+                )
+            return 'bestvideo[vcodec!=none]+bestaudio[acodec!=none]/best'
+        if max_height:
+            return f'best[height<={max_height}]/best'
+        return 'best'
     elif download_type == "2":  # Solo Audio
-        return 'bestaudio[ext=m4a]/bestaudio/best'
-    return 'best[ext=mp4]/best'
+        return 'bestaudio/best'
+    return 'best'
+
+
+def choose_video_quality():
+    """Permite seleccionar la calidad máxima deseada para video."""
+    print("\n🎚️ Selecciona la calidad máxima de video:")
+    for option, (label, _) in VIDEO_QUALITY_PRESETS.items():
+        print(f"{option}. {label}")
+
+    while True:
+        selected = input("\n📝 Opción de calidad (1-5): ").strip()
+        if selected in VIDEO_QUALITY_PRESETS:
+            label, height = VIDEO_QUALITY_PRESETS[selected]
+            print(f"✅ Calidad seleccionada: {label}")
+            return height
+        print("❌ Por favor, selecciona una opción válida (1-5)")
 
 def get_output_template(download_type):
     """Obtiene la plantilla de nombre de archivo según el tipo de descarga"""
@@ -75,13 +105,13 @@ def get_output_template(download_type):
         return os.path.join(get_download_path(), "%(title)s.%(ext)s")
     return os.path.join(get_download_path(), "%(title)s.%(ext)s")
 
-def download_video(url, download_type):
+def download_video(url, download_type, max_height=None):
     """Función principal para descargar el video o audio"""
     try:
         print("\n🔄 Conectando a YouTube...")
         
         # Obtener formato según el tipo de descarga
-        format_option = get_download_format(download_type)
+        format_option = get_download_format(download_type, max_height)
         is_audio_only = download_type == "2"
         
         # Configuración base de yt-dlp
@@ -99,7 +129,6 @@ def download_video(url, download_type):
             },
             'extractor_args': {
                 'youtube': {
-                    'skip': ['dash', 'hls'],
                     'player_client': ['android', 'web'],
                     'player_skip': ['js', 'configs', 'webpage'],
                 }
@@ -109,6 +138,7 @@ def download_video(url, download_type):
             'no_color': True,
             'geo_bypass': True,
             'geo_verification_proxy': None,
+            'merge_output_format': 'mp4',
         }
         
         # Configurar postprocesadores según el tipo de descarga
@@ -117,11 +147,6 @@ def download_video(url, download_type):
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
-            }]
-        elif is_ffmpeg_installed():
-            ydl_opts['postprocessors'] = [{
-                'key': 'FFmpegVideoConvertor',
-                'preferedformat': 'mp4',
             }]
         
         # Primero obtener información del video
@@ -153,6 +178,10 @@ def download_video(url, download_type):
                 print("🎵 Descargando solo audio...")
             else:
                 print("🎥 Descargando video...")
+                if max_height:
+                    print(f"🎯 Resolución máxima solicitada: {max_height}p")
+                else:
+                    print("🎯 Resolución: mejor disponible")
             
             ydl.download([url])
         
@@ -218,7 +247,11 @@ def main():
             print("❌ Por favor, selecciona una opción válida (1-2)")
         
         # Intentar descargar
-        success = download_video(url, download_type)
+        max_height = None
+        if download_type == "1":
+            max_height = choose_video_quality()
+
+        success = download_video(url, download_type, max_height)
         
         if success:
             print("\n" + "=" * 80)
