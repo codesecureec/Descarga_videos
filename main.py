@@ -85,6 +85,23 @@ def get_download_format(download_type, max_height=None):
     return 'best'
 
 
+
+
+def get_video_convertor_postprocessor():
+    """Devuelve el postprocesador FFmpegVideoConvertor compatible con la versión instalada."""
+    try:
+        from inspect import signature
+        from yt_dlp.postprocessor.ffmpeg import FFmpegVideoConvertorPP
+
+        params = signature(FFmpegVideoConvertorPP.__init__).parameters
+        if 'preferredformat' in params:
+            return {'key': 'FFmpegVideoConvertor', 'preferredformat': 'mp4'}
+    except Exception:
+        # Si no se puede inspeccionar la firma, usamos el nombre histórico.
+        pass
+
+    return {'key': 'FFmpegVideoConvertor', 'preferedformat': 'mp4'}
+
 def choose_video_quality():
     """Permite seleccionar la calidad máxima deseada para video."""
     print("\n🎚️ Selecciona la calidad máxima de video:")
@@ -148,9 +165,8 @@ def download_video(url, download_type, max_height=None):
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }]
-        # Para video evitamos FFmpegVideoConvertor porque cambia entre versiones
-        # de yt-dlp (preferedformat/preferredformat) y puede romper la descarga.
-        # merge_output_format=mp4 ya se encarga de la salida cuando ffmpeg está disponible.
+        elif is_ffmpeg_installed():
+            ydl_opts['postprocessors'] = [get_video_convertor_postprocessor()]
         
         # Primero obtener información del video
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
